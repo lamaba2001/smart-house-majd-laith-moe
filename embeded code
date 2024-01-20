@@ -1,0 +1,93 @@
+void PWM_init();
+void updatePWM(unsigned int temperature);
+void ATD_init_A0();
+unsigned int ATD_read_A0();
+void displayTemperature(unsigned int adcValue);
+
+sbit LCD_D4 at RB0_bit;
+sbit LCD_D5 at RB1_bit;
+sbit LCD_D6 at RB2_bit;
+sbit LCD_D7 at RB3_bit;
+sbit LCD_RS at RB4_bit;
+sbit LCD_EN at RB5_bit;
+
+sbit LCD_D4_Direction at TRISB0_bit;
+sbit LCD_D5_Direction at TRISB1_bit;
+sbit LCD_D6_Direction at TRISB2_bit;
+sbit LCD_D7_Direction at TRISB3_bit;
+sbit LCD_RS_Direction at TRISB4_bit;
+sbit LCD_EN_Direction at TRISB5_bit;
+
+void main() {
+    char txt[7];
+    unsigned int temp;
+
+    TRISC = 0x02;
+    TRISA = 0x01;
+    TRISC1_bit = 0;  // Set RC1 as an output for PWM
+    PWM_init();
+    ATD_init_A0();
+
+    Lcd_Init();           // Initialize LCD
+    Lcd_Cmd(_LCD_CLEAR);  // Clear display
+    Lcd_Cmd(_LCD_CURSOR_OFF);
+
+    while (1) {
+        temp = ATD_read_A0();
+        displayTemperature(temp);
+        updatePWM(temp);
+        Delay_ms(1000);
+    }
+}
+
+void PWM_init() {
+    CCP2CON = 0x0C;   // PWM mode
+    PR2 = 249;        // Set PWM period (for a frequency of 1kHz)
+    T2CON = 0x04;     // TMR2 ON, Prescaler = 1
+}
+
+void updatePWM(unsigned int temperature) {
+    if (temperature <= 20)
+        CCPR2L = 0;  // 0% duty cycle
+    else if (temperature <= 28)
+        CCPR2L = 64;  // 25% duty cycle
+    else if (temperature <= 37)
+        CCPR2L = 128;  // 50% duty cycle
+    else if (temperature <= 46)
+        CCPR2L = 192;  // 75% duty cycle
+    else
+        CCPR2L = 255;  // 100% duty cycle
+}
+
+void displayTemperature(unsigned int adcValue) {
+     char txt[7];
+    float voltage = (adcValue * 5.0) / 1023.0;
+    float temperature = (voltage) * 100.0;  // LM35 output is 10 mV/°C
+
+    char tempStr[7];
+    FloatToStr(temperature, tempStr);
+
+    Lcd_out(1, 1, "Temp: ");
+    Lcd_out(2, 1, tempStr);
+    Lcd_out(2, 7, " C  ");
+
+    Lcd_Out(3, 1, "PWM: ");
+    ByteToStr(CCPR2L, txt);
+    Lcd_Out(3, 6, txt);
+    Lcd_Out(3, 9, "%");
+}
+
+
+
+void ATD_init_A0() {
+    ADCON0 = 0x41;  // ATD ON, Don't GO, Channel 0, Fosc/16
+    ADCON1 = 0xCE;  // All channels are Digital except RA0/AN0 is Analog
+    TRISA = 0x01;
+    PORTA = 0x00;
+}
+
+unsigned int ATD_read_A0() {
+    ADCON0 = ADCON0 | 0x04;
+    while (ADCON0 & 0x04);
+    return ((ADRESH << 8) | ADRESL);
+}
